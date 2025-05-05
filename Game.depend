@@ -1,0 +1,9 @@
+# depslib dependency file v1.0
+1745218694 source:c:\users\lenovo\documents\game\main.cpp
+	<SDL.h>
+	<SDL_image.h>
+	<deque>
+	<ctime>
+	<iostream>
+	<algorithm>
+
