@@ -1,5 +1,6 @@
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL_mixer.h>
 #include <deque>
 #include <ctime>
 #include <iostream>
@@ -10,7 +11,7 @@ const int SCREEN_HEIGHT = 700;
 const int TILE_SIZE = 30;
 
 enum Direction { UP, DOWN, LEFT, RIGHT };
-
+enum GameState { MENU, PLAYING };
 struct Point {
     int x, y;
     bool operator==(const Point& other) const {
@@ -21,8 +22,9 @@ struct Point {
 class SnakeGame {
 public:
     SnakeGame() {
-        SDL_Init(SDL_INIT_VIDEO);
+        SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
         IMG_Init(IMG_INIT_PNG);
+        Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048);
 
         window = SDL_CreateWindow("Rắn Săn Mồi", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                   SCREEN_WIDTH, SCREEN_HEIGHT, 0);
@@ -33,15 +35,36 @@ public:
         snakeTex = loadTexture("assets/snake.png");
         foodTex = loadTexture("assets/food.png");
         gameOverTex = loadTexture("assets/gameover.png");
+        menuTex = loadTexture("assets/menu.png");
+
+        // Load sounds
+        eatSound = Mix_LoadWAV("assets/eat.wav");
+        gameOverSound = Mix_LoadWAV("assets/gameover.wav");
+        bgMusic = Mix_LoadMUS("assets/bg_music.mp3");
+
+        if (!eatSound || !gameOverSound || !bgMusic) {
+            std::cerr << "Không tải được âm thanh: " << Mix_GetError() << std::endl;
+            exit(1);
+        }
+        Mix_VolumeChunk(eatSound, 80);
+        Mix_VolumeChunk(gameOverSound, 100);
+        Mix_VolumeMusic(30);
+
+        Mix_PlayMusic(bgMusic, -1); // Nhạc nền lặp vô hạn
 
         reset();
     }
 
     ~SnakeGame() {
+        Mix_FreeChunk(eatSound);
+        Mix_FreeChunk(gameOverSound);
+        Mix_FreeMusic(bgMusic);
+        Mix_CloseAudio();
         SDL_DestroyTexture(backgroundTex);
         SDL_DestroyTexture(snakeTex);
         SDL_DestroyTexture(foodTex);
         SDL_DestroyTexture(gameOverTex);
+        SDL_DestroyTexture(menuTex);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         IMG_Quit();
@@ -54,6 +77,9 @@ public:
         direction = RIGHT;
         spawnFood();
         gameOver = false;
+        if (!Mix_PlayingMusic()) {
+        Mix_PlayMusic(bgMusic, -1);
+    }
     }
 
     SDL_Texture* loadTexture(const std::string& path) {
@@ -75,26 +101,42 @@ public:
     void run() {
         Uint32 lastUpdate = SDL_GetTicks();
         bool running = true;
+
         while (running) {
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
                 if (e.type == SDL_QUIT) running = false;
-                if (e.type == SDL_KEYDOWN) {
-                    switch (e.key.keysym.sym) {
-                        case SDLK_UP:    if (direction != DOWN) direction = UP; break;
-                        case SDLK_DOWN:  if (direction != UP) direction = DOWN; break;
-                        case SDLK_LEFT:  if (direction != RIGHT) direction = LEFT; break;
-                        case SDLK_RIGHT: if (direction != LEFT) direction = RIGHT; break;
-                        case SDLK_r:     if (gameOver) {reset();} break;
+
+                if (state == MENU) {
+                    if (e.type == SDL_KEYDOWN) {
+                        if (e.key.keysym.sym == SDLK_RETURN) {
+                            reset();
+                            state = PLAYING;
+                        } else if (e.key.keysym.sym == SDLK_ESCAPE) {
+                            running = false;
+                        }
+                    }
+                } else if (state == PLAYING) {
+                    if (e.type == SDL_KEYDOWN) {
+                        switch (e.key.keysym.sym) {
+                            case SDLK_UP:    if (direction != DOWN) direction = UP; break;
+                            case SDLK_DOWN:  if (direction != UP) direction = DOWN; break;
+                            case SDLK_LEFT:  if (direction != RIGHT) direction = LEFT; break;
+                            case SDLK_RIGHT: if (direction != LEFT) direction = RIGHT; break;
+                            case SDLK_r:     if (gameOver) { reset(); } break;
+                            case SDLK_ESCAPE: state = MENU; break;
+                        }
                     }
                 }
             }
 
             Uint32 now = SDL_GetTicks();
-            if (now - lastUpdate > 140) {
+            if (state == PLAYING && now - lastUpdate > 140) {
                 update();
                 render();
                 lastUpdate = now;
+            } else if (state == MENU) {
+                renderMenu();
             }
         }
     }
@@ -117,12 +159,15 @@ public:
             head.y >= SCREEN_HEIGHT / TILE_SIZE ||
             std::find(snake.begin(), snake.end(), head) != snake.end()) {
             gameOver = true;
+            Mix_HaltMusic();
+            Mix_PlayChannel(-1, gameOverSound, 0);
             return;
         }
 
         snake.push_front(head);
 
         if (head == food) {
+            Mix_PlayChannel(-1, eatSound, 0);
             spawnFood();
         } else {
             snake.pop_back();
@@ -150,13 +195,18 @@ public:
         if (gameOver) {
             // In ra texture gameoverTex
             SDL_Rect dst;
-            dst.w = 200;  // hoặc width của ảnh
-            dst.h = 100;  // hoặc height của ảnh
+            dst.w = 400;  // hoặc width của ảnh
+            dst.h = 300;  // hoặc height của ảnh
             dst.x = (SCREEN_WIDTH - dst.w) / 2;
             dst.y = (SCREEN_HEIGHT - dst.h) / 2;
             SDL_RenderCopy(renderer, gameOverTex, nullptr, &dst);
         }
 
+        SDL_RenderPresent(renderer);
+    }
+    void renderMenu() {
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, menuTex, nullptr, nullptr);
         SDL_RenderPresent(renderer);
     }
 
@@ -167,10 +217,15 @@ private:
     SDL_Texture* snakeTex = nullptr;
     SDL_Texture* foodTex = nullptr;
     SDL_Texture* gameOverTex = nullptr;
+    SDL_Texture* menuTex = nullptr;
+    Mix_Chunk* eatSound = nullptr;
+    Mix_Chunk* gameOverSound = nullptr;
+    Mix_Music* bgMusic = nullptr;
     std::deque<Point> snake;
     Point food;
     Direction direction;
     bool gameOver = false;
+    GameState state = MENU;
 };
 
 int main(int argc, char* argv[]) {
