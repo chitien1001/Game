@@ -30,14 +30,12 @@ public:
                                   SCREEN_WIDTH, SCREEN_HEIGHT, 0);
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
-        // Load textures
         backgroundTex = loadTexture("assets/background.png");
         snakeTex = loadTexture("assets/snake.png");
         foodTex = loadTexture("assets/food.png");
         gameOverTex = loadTexture("assets/gameover.png");
         menuTex = loadTexture("assets/menu.png");
 
-        // Load sounds
         eatSound = Mix_LoadWAV("assets/eat.wav");
         gameOverSound = Mix_LoadWAV("assets/gameover.wav");
         bgMusic = Mix_LoadMUS("assets/bg_music.mp3");
@@ -50,8 +48,7 @@ public:
         Mix_VolumeChunk(gameOverSound, 100);
         Mix_VolumeMusic(30);
 
-        Mix_PlayMusic(bgMusic, -1); // Nhạc nền lặp vô hạn
-
+        Mix_PlayMusic(bgMusic, -1);
         reset();
     }
 
@@ -175,28 +172,28 @@ public:
     }
 
     void render() {
-        // Background
+
         SDL_Rect bg_pos {
             0, 0,
             SCREEN_WIDTH, SCREEN_HEIGHT
         };
         SDL_RenderCopy(renderer, backgroundTex, nullptr, nullptr);
 
-        // Snake
+
         for (const auto& p : snake) {
             SDL_Rect dst = {p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
             SDL_RenderCopy(renderer, snakeTex, nullptr, &dst);
         }
 
-        // Food
+
         SDL_Rect foodRect = {food.x * TILE_SIZE, food.y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
         SDL_RenderCopy(renderer, foodTex, nullptr, &foodRect);
 
         if (gameOver) {
-            // In ra texture gameoverTex
+
             SDL_Rect dst;
-            dst.w = 400;  // hoặc width của ảnh
-            dst.h = 300;  // hoặc height của ảnh
+            dst.w = 400;
+            dst.h = 300;
             dst.x = (SCREEN_WIDTH - dst.w) / 2;
             dst.y = (SCREEN_HEIGHT - dst.h) / 2;
             SDL_RenderCopy(renderer, gameOverTex, nullptr, &dst);
